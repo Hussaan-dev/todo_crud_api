@@ -12,6 +12,10 @@ tasks= [
 class TaskCreate(BaseModel):
     title:str
 
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    done: bool | None = None
+
 def find_task(id):
     for task in tasks:
         if task["id"]==id:
@@ -49,3 +53,23 @@ def get_task(id: int):
     if task is None:
         raise HTTPException(status_code=404,detail=f"Task {id} not found")
     return {"task":task}
+
+@app.put("/tasks/{id}")
+def update_task(id:int ,update: TaskUpdate):
+    task=find_task(id)
+    if task is None:
+        raise HTTPException(status_code=404,detail=f"Task {id} not found")
+    if update.title is not None :
+        if update.title.strip()=="":
+            raise HTTPException(status_code=400,detail="Task title cannot be empty")
+        task["title"]=update.title
+    if update.done is not None :
+            task["done"]=update.done
+    return {"updated_task":task}
+
+@app.delete("/tasks/{id}",status_code=204)
+def del_task(id:int):
+    task=find_task(id)
+    if task is None:
+        raise HTTPException(status_code=404,detail=f"Task {id} not found")
+    tasks.remove(task)
