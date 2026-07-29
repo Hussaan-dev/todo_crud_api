@@ -34,11 +34,11 @@ def root():
 def health():
     return {"status":"ok"}
 
-@app.get("/tasks")
+@app.get("/tasks",description="List all tasks")
 def get_tasks():
     return {"tasks":tasks}
 
-@app.post("/tasks",status_code=201)
+@app.post("/tasks",status_code=201,description="Create a new task")
 def create_task(task: TaskCreate):
     if task.title.strip()=="":
         raise HTTPException(status_code=400,detail="Task title seems to be empty")
@@ -47,14 +47,14 @@ def create_task(task: TaskCreate):
     tasks.append(new_task)
     return {"new_task": new_task}
 
-@app.get("/tasks/{id}")
+@app.get("/tasks/{id}",description="Search a task")
 def get_task(id: int):
     task=find_task(id)
     if task is None:
         raise HTTPException(status_code=404,detail=f"Task {id} not found")
     return {"task":task}
 
-@app.put("/tasks/{id}")
+@app.put("/tasks/{id}",description="Update a task")
 def update_task(id:int ,update: TaskUpdate):
     task=find_task(id)
     if task is None:
@@ -67,7 +67,7 @@ def update_task(id:int ,update: TaskUpdate):
             task["done"]=update.done
     return {"updated_task":task}
 
-@app.delete("/tasks/{id}",status_code=204)
+@app.delete("/tasks/{id}",status_code=204,description="Delete a task")
 def del_task(id:int):
     task=find_task(id)
     if task is None:
