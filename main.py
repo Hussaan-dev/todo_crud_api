@@ -1,5 +1,6 @@
 from fastapi import FastAPI,HTTPException
 from pydantic import BaseModel
+import sqlite3
 
 app=FastAPI()
 
@@ -8,6 +9,18 @@ tasks= [
     {"id":2,"title":"workout","done":False},
     {"id":3,"title":"meal prep","done":False},
 ]
+
+cx=sqlite3.connect("tasks.db")
+cu=cx.cursor()
+cu.execute("Create table if not exists tasks(id INTEGER PRIMARY KEY,title TEXT,done BOOLEAN)")
+cx.commit()
+cu.execute("SELECT COUNT(*) FROM tasks")
+count=cu.fetchone()
+if count[0]==0:
+    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",("study",1))
+    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",("workout",0))
+    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",("meal prep",0))
+    cx.commit()
 
 class TaskCreate(BaseModel):
     title:str
