@@ -1,19 +1,27 @@
 from fastapi import FastAPI,HTTPException
 from pydantic import BaseModel
-import sqlite3
+import psycopg
+from dotenv import load_dotenv
+import os
 
 app=FastAPI()
+load_dotenv()
 
-cx=sqlite3.connect("tasks.db",check_same_thread=False)
+DATABASE_URL=os.environ.get("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("Missing DATABASE_URL")
+
+cx=psycopg.connect(DATABASE_URL)
 cu=cx.cursor()
-cu.execute("Create table if not exists tasks(id INTEGER PRIMARY KEY,title TEXT,done BOOLEAN)")
+cu.execute("Create table if not exists tasks(id SERIAL PRIMARY KEY,title TEXT,done BOOLEAN)")
 cx.commit()
 cu.execute("SELECT COUNT(*) FROM tasks")
 count=cu.fetchone()
 if count[0]==0:
-    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",("study",1))
-    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",("workout",0))
-    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",("meal prep",0))
+    cu.execute("INSERT INTO tasks (title,done) VALUES (%s,%s)",("study",True))
+    cu.execute("INSERT INTO tasks (title,done) VALUES (%s,%s)",("workout",False))
+    cu.execute("INSERT INTO tasks (title,done) VALUES (%s,%s)",("meal prep",False))
     cx.commit()
 
 class TaskCreate(BaseModel):
@@ -24,7 +32,7 @@ class TaskUpdate(BaseModel):
     done: bool | None = None
 
 def find_task(id):
-    cu.execute("SELECT * FROM tasks WHERE id = ?",(id,))
+    cu.execute("SELECT * FROM tasks WHERE id = %s",(id,))
     task=cu.fetchone()
     return task
 
@@ -49,11 +57,10 @@ def get_tasks():
 def create_task(task: TaskCreate):
     if task.title.strip()=="":
         raise HTTPException(status_code=400,detail="Task title seems to be empty")
-    cu.execute("INSERT INTO tasks (title,done) VALUES (?,?)",(task.title,0))
+    cu.execute("INSERT INTO tasks (title,done) VALUES (%s,%s) RETURNING *",(task.title,False))
+    last_row=cu.fetchone()
     cx.commit()
-    new_id=cu.lastrowid
-    new_task={"id":new_id,"title":task.title,"done":False}
-    return {"new_task": new_task}
+    return {"new_task": row_to_dict(last_row)}
 
 @app.get("/tasks/{id}",description="Search a task")
 def get_task(id: int):
@@ -70,10 +77,9 @@ def update_task(id:int ,update: TaskUpdate):
     if update.title is not None :
         if update.title.strip()=="":
             raise HTTPException(status_code=400,detail="Task title cannot be empty")
-
-        cu.execute("UPDATE tasks SET title=? WHERE id =?",(update.title,id))
+        cu.execute("UPDATE tasks SET title=%s WHERE id =%s",(update.title,id))
     if update.done is not None :
-        cu.execute("UPDATE tasks SET done=? WHERE id =?",(update.done,id))
+        cu.execute("UPDATE tasks SET done=%s WHERE id =%s",(update.done,id))
     cx.commit()
     task=find_task(id)
     return {"updated_task":row_to_dict(task)}
@@ -83,5 +89,5 @@ def del_task(id:int):
     task=find_task(id)
     if task is None:
         raise HTTPException(status_code=404,detail=f"Task {id} not found")
-    cu.execute("DELETE FROM tasks WHERE id = ?",(id,))
+    cu.execute("DELETE FROM tasks WHERE id = %s",(id,))
     cx.commit()
