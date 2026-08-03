@@ -1,32 +1,45 @@
 # To-Do CRUD API
 
-A small FastAPI app that manages a to-do list — create, read, update and delete tasks. Built for the FlyRank Backend Track internship. Week 2 had it running on an in-memory list, week 3 moved it to a real SQLite database, so data now survives a restart.
+A small FastAPI app that manages a to-do list — create, read, update and delete tasks. Built for the FlyRank Backend Track internship. Storage has moved three times: week 2 was an in-memory list, week 3 moved to SQLite, week 1's containerize assignment moved it again to a real Postgres database running in Docker. Same endpoints the whole way through.
 
 ## Tech Stack
 
 - **Framework:** FastAPI
-- **Database:** SQLite (`tasks.db`), via Python's built-in `sqlite3`
+- **Database:** PostgreSQL, running in a Docker container
+- **Driver:** psycopg
 - **Validation:** Pydantic
 - **Docs:** Swagger UI (built in)
+- **Containers:** Docker + Docker Compose
 
-## Why SQLite
+## Why Postgres (and why Docker)
 
-No server to install, no config — it's just one file. Good fit for a small project like this, and it means the data actually survives a restart now, instead of resetting every time.
+SQLite was fine for one file on one machine, but a real server-based database is what production backends actually use. Running it in Docker means I don't install Postgres directly — I run the official image, and it behaves the same on any machine. `docker compose up` starts the app and the database together, networked, with one command.
 
 ## Local Setup
 
 ```bash
 git clone https://github.com/Hussaan-dev/todo_crud_api.git
 cd todo_crud_api
-python -m venv venv
-source venv/bin/activate
-pip install fastapi uvicorn
-uvicorn main:app --reload
+cp .env.example .env
+docker compose up
 ```
 
-`tasks.db` gets created automatically on first run, with 3 example tasks seeded in. It's gitignored, so every fresh clone starts clean.
+That's it — Docker builds the app image, starts Postgres, waits for it to actually be ready (via a healthcheck), then starts the API. The `tasks` table and 3 example tasks are created automatically on first run.
 
 Visit `http://localhost:8000/docs` for the interactive Swagger UI.
+
+### Environment variables
+
+Set in `.env` (see `.env.example` for the required keys):
+
+```
+DATABASE_URL=postgresql://postgres:dev@localhost:5433/tasks
+POSTGRES_DB=tasks
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=dev
+```
+
+`.env` is git-ignored — real values never get committed. `docker-compose.yml` only references `${VARIABLE}` placeholders, no secrets hardcoded in it.
 
 ## Endpoints
 
@@ -52,23 +65,17 @@ content-type: application/json
 [{"id":1,"title":"study","done":true},{"id":2,"title":"workout","done":false},{"id":3,"title":"meal prep","done":false}]
 ```
 
-## Poking the database directly
-
-Opened `tasks.db` in DB Browser for SQLite and ran some queries by hand, outside the API. Ran `SELECT COUNT(*) FROM tasks;` and it matched exactly what `GET /tasks` was showing. Then changed a task's `done` value straight in DB Browser, saved it, and called `GET /tasks/{id}` — no restart needed, it just showed the new value immediately. Same file, no syncing.
-
-<img src="images/db-browser.png" alt="DB Browser" width="400">
-
 ## Swagger UI
 
 <img src="images/swagger-docs.png" alt="Swagger UI" width="400">
 
 ## What I Learned
 
-- SQLite objects can't be shared across threads by default — FastAPI runs requests on different threads, so I needed `check_same_thread=False` on the connection
-- `INTEGER PRIMARY KEY` means the database hands out ids for you — no need to track the next id myself anymore
-- After an INSERT, `cursor.lastrowid` tells you the id SQLite just assigned
-- Rows come back as plain tuples, not dicts — had to write a small helper to convert them into the JSON shape the API returns
-- Always re-fetch from the database after an UPDATE before returning a response, instead of returning stale data from before the update ran
+- Postgres uses `%s` placeholders, not SQLite's `?` — different driver, different syntax for the same parameterized-query idea
+- Postgres has no `lastrowid` — `INSERT ... RETURNING *` gets the new row back (id included) as part of the same statement
+- `depends_on` alone only waits for a container to *start*, not for the database inside it to actually be ready to accept connections — needed a `healthcheck` (`pg_isready`) plus `condition: service_healthy` to fix a real race condition where the app tried to connect before Postgres had finished initializing
+- Postgres 18's official image changed where it expects its volume mounted (`/var/lib/postgresql`, not `/var/lib/postgresql/data`) to make future version upgrades easier
+- Inside a Compose network, containers reach each other by service name (`db`), not `localhost` — `localhost` inside a container means the container itself
 
 ## What's Left
 
