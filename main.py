@@ -3,15 +3,21 @@ from pydantic import BaseModel
 import psycopg
 from dotenv import load_dotenv
 import os
+from supabase import create_client
 
 app=FastAPI()
 load_dotenv()
 
-DATABASE_URL=os.environ.get("DATABASE_URL")
+DATABASE_URL=os.environ.get('DATABASE_URL')
+SUPABASE_URL=os.environ.get('SUPABASE_URL')
+SUPABASE_KEY=os.environ.get('SUPABASE_KEY')
 
 if not DATABASE_URL:
     raise RuntimeError("Missing DATABASE_URL")
+if not (SUPABASE_URL and SUPABASE_KEY):
+    raise RuntimeError("Missing SUPABASE_URL or SUPABASE_KEY")
 
+supabase=create_client(SUPABASE_URL,SUPABASE_KEY)
 cx=psycopg.connect(DATABASE_URL)
 cu=cx.cursor()
 cu.execute("Create table if not exists tasks(id SERIAL PRIMARY KEY,title TEXT,done BOOLEAN)")
