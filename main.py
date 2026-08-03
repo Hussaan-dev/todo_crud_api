@@ -1,5 +1,5 @@
 from fastapi import FastAPI,HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel,EmailStr
 import psycopg
 from dotenv import load_dotenv
 import os
@@ -37,6 +37,10 @@ class TaskUpdate(BaseModel):
     title: str | None = None
     done: bool | None = None
 
+class Auth(BaseModel):
+    email: EmailStr
+    password: str
+
 def find_task(id):
     cu.execute("SELECT * FROM tasks WHERE id = %s",(id,))
     task=cu.fetchone()
@@ -44,6 +48,26 @@ def find_task(id):
 
 def row_to_dict(row):
     return {"id":row[0],"title":row[1],"done":bool(row[2])}
+
+@app.post("/auth/signup",status_code=201)
+def signup(cred: Auth):
+    if cred.password.strip()=="":
+            raise HTTPException(status_code=400,detail="Missing password")
+    try:
+        result=supabase.auth.sign_up({"email":cred.email,"password":cred.password})
+    except Exception as e:
+        raise HTTPException(status_code=400,detail=str(e))
+    return result
+
+@app.post("/auth/login",status_code=200)
+def login(cred: Auth):
+    if cred.password.strip()=="":
+            raise HTTPException(status_code=400,detail="Missing password")
+    try:
+        result=supabase.auth.sign_in_with_password({"email":cred.email,"password":cred.password})
+    except Exception:
+        raise HTTPException(status_code=401,detail="Invalid login credentials")
+    return result
 
 @app.get("/")
 def root():
